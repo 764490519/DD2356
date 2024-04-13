@@ -7,7 +7,7 @@ double omp_sum(double *x, size_t size)
 {
     double sum_val = 0.0;
 
-#pragma omp parallel for reduction(+ : sum_val)
+#pragma omp parallel for reduction(+ : sum_val) num_threads(32)
     for (size_t i = 0; i < size; ++i)
     {
         sum_val += x[i];
@@ -49,7 +49,6 @@ int main(int argc, char *argv[])
     for (int i = 0; i < num_runs; ++i)
     {
         double start_time = omp_get_wtime();
-        omp_set_num_threads(32);
         omp_sum(array, size);
         double end_time = omp_get_wtime();
         times[i] = end_time - start_time;
