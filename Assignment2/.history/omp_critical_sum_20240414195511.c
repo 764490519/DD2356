@@ -3,34 +3,20 @@
 #include <omp.h>
 #include <math.h>
 
-#define MAX_THREADS 128
-
-double omp_local_sum(double *x, size_t size)
+double omp_critical_sum(double *x, size_t size)
 {
-    double global_sum = 0.0;
-    int num_threads = omp_get_max_threads();
-    double local_sum[num_threads];
-    for (int i = 0; i < num_threads; i++)
-    {
-        local_sum[i] = 0.0;
-    }
+    double sum_val = 0.0;
 
-#pragma omp parallel
+#pragma omp parallel for
+    for (size_t i = 0; i < size; ++i)
     {
-        int tid = omp_get_thread_num();
-#pragma omp for
-        for (size_t i = 0; i < size; ++i)
+#pragma omp critical
         {
-            local_sum[tid] += x[i];
+            sum_val += x[i];
         }
     }
 
-    for (int i = 0; i < num_threads; ++i)
-    {
-        global_sum += local_sum[i];
-    }
-
-    return global_sum;
+    return sum_val;
 }
 
 void generate_random(double *input, size_t size)
@@ -45,11 +31,13 @@ int main(int argc, char *argv[])
 {
 
     int num_runs = atoi(argv[1]);
-    size_t size = 10000000;
+
+    size_t size = 10000000; 
     double *array = (double *)malloc(size * sizeof(double));
+
     generate_random(array, size);
 
-    int thread_counts[] = {1, 32, 64, 128};
+    int thread_counts[] = {1, 2, 4, 8, 16, 20, 24, 28, 32};
     int num_thread_counts = sizeof(thread_counts) / sizeof(thread_counts[0]);
 
     for (int j = 0; j < num_thread_counts; ++j)
@@ -61,7 +49,7 @@ int main(int argc, char *argv[])
         {
             double start_time = omp_get_wtime();
             omp_set_num_threads(num_threads);
-            omp_local_sum(array, size);
+            omp_critical_sum(array, size);
             double end_time = omp_get_wtime();
             total_time += (end_time - start_time);
         }
