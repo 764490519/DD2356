@@ -44,6 +44,8 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    double startTime = MPI_Wtime(); //
+
     int birdNum = DEFAULT_BIRD_NUM;
     if (argc > 1)
     {
@@ -89,6 +91,13 @@ int main(int argc, char *argv[])
     MPI_Scatter(allPosY.data(), localBirdNum, MPI_FLOAT, posY.data(), localBirdNum, MPI_FLOAT, 0, MPI_COMM_WORLD);
     MPI_Scatter(allTheta.data(), localBirdNum, MPI_FLOAT, theta.data(), localBirdNum, MPI_FLOAT, 0, MPI_COMM_WORLD);
     computeActiveMatter(gPara, aPara, posX, posY, theta, rank, size);
+
+    double endTime = MPI_Wtime();
+
+    if (rank == 0)
+    {
+        cout << "Total time: " << endTime - startTime << " seconds" << endl;
+    }
 
     MPI_Finalize();
     return 0;
