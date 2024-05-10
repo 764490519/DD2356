@@ -1,6 +1,6 @@
 matrix_dimension=1680
 
-processor_sizes = (1 4 9 16 25 36 49 64 100 144 196 225 256)
+processor_sizes=(1 4 9 16 25 36 49 64 100 144 196 225 256)
 
 # Loop over each processor size
 for size in "${processor_sizes[@]}"
