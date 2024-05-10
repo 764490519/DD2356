@@ -16,7 +16,8 @@ void generate_and_write_matrix(const char *filename, int dim)
     {
         for (int j = 0; j < dim; j++)
         {
-            double value = (double)rand() / RAND_MAX * 100.0; // Random double between 0 and 100
+            // Random double between 0 and 100
+            double value = (double)rand() / RAND_MAX * 100.0;
             fprintf(file, "%f ", value);
         }
         fprintf(file, "\n");
@@ -40,13 +41,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Seed the random number generator
     srand(time(NULL));
 
-    // Generate and write matrix A
+    // Generate matrix A
     generate_and_write_matrix("matrix_A.out", dim);
 
-    // Generate and write matrix B
+    // Generate matrix B
     generate_and_write_matrix("matrix_B.out", dim);
 
     printf("Matrices of dimension %dx%d were generated and written to matrix_A.out and matrix_B.out.\n", dim, dim);

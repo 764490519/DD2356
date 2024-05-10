@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Function to read a matrix from a file
+
 double **read_matrix(const char *filename, int dim)
 {
     FILE *file = fopen(filename, "r");
@@ -25,7 +25,8 @@ double **read_matrix(const char *filename, int dim)
     return matrix;
 }
 
-// Function to multiply two matrices
+
+
 double **multiply_matrices(double **A, double **B, int dim)
 {
     double **C = (double **)malloc(dim * sizeof(double *));
@@ -43,7 +44,7 @@ double **multiply_matrices(double **A, double **B, int dim)
     return C;
 }
 
-// Function to write a matrix to a file
+
 void write_matrix(const char *filename, double **matrix, int dim)
 {
     FILE *file = fopen(filename, "w");
@@ -57,7 +58,7 @@ void write_matrix(const char *filename, double **matrix, int dim)
     {
         for (int j = 0; j < dim; j++)
         {
-            fprintf(file, "%.2f ", matrix[i][j]);
+            fprintf(file, "%f ", matrix[i][j]);
         }
         fprintf(file, "\n");
     }
@@ -84,19 +85,13 @@ int main(int argc, char *argv[])
     double **B = read_matrix("matrix_B.out", dim);
     if (A == NULL || B == NULL)
     {
-        return 1; // Error handling in read_matrix will explain the failure
+        return 1; 
     }
 
     double **C = multiply_matrices(A, B, dim);
     write_matrix("matrix_C.out", C, dim);
 
-    // Clean up memory
-    for (int i = 0; i < dim; i++)
-    {
-        free(A[i]);
-        free(B[i]);
-        free(C[i]);
-    }
+
     free(A);
     free(B);
     free(C);

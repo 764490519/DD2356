@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-// Function to read a block of the matrix from file
+// Read a block of the matrix from file
 void read_matrix_block(const char *filename, double *block, int block_size, int grid_size, int block_row, int block_col)
 {
     FILE *file = fopen(filename, "r");
@@ -28,7 +28,8 @@ void read_matrix_block(const char *filename, double *block, int block_size, int 
     {
         for (int j = 0; j < block_size; j++)
         {
-            block[i * block_size + j] = temp[(block_row * block_size + i) * full_size + block_col * block_size + j];
+            // block[i * block_size + j] = temp[(block_row * block_size + i) * full_size + block_col * block_size + j];
+            block[i * block_size + j] = temp[(block_row * block_size + i) * full_size + (block_col * block_size + j)];
         }
     }
 
@@ -36,21 +37,9 @@ void read_matrix_block(const char *filename, double *block, int block_size, int 
     fclose(file);
 }
 
-// Function to perform local matrix multiplication
-void local_matrix_multiply(double *A, double *B, double *C, int size)
+int getidx(int row, int col, int sqr)
 {
-    for (int i = 0; i < size; i++)
-    {
-        for (int j = 0; j < size; j++)
-        {
-            double sum = 0.0;
-            for (int k = 0; k < size; k++)
-            {
-                sum += A[i * size + k] * B[k * size + j];
-            }
-            C[i * size + j] += sum;
-        }
-    }
+    return ((row + sqr) % sqr) * sqr + (col + sqr) % sqr;
 }
 
 int main(int argc, char **argv)
@@ -58,63 +47,157 @@ int main(int argc, char **argv)
     MPI_Init(&argc, &argv);
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_size(MPI_COMM_WORLD, &size); // number of processor
 
-    int n = sqrt(size);
-    if (n * n != size)
+    int grid_size = sqrt(size); // processor matrix size
+    if (grid_size * grid_size != size)
     {
         fprintf(stderr, "The number of processes must be a perfect square.\n");
         MPI_Finalize();
         return 1;
     }
 
-    int block_size = atoi(argv[1]); // Assume the matrix size is evenly divisible by n
-    double *A = malloc(block_size * block_size * sizeof(double));
-    double *B = malloc(block_size * block_size * sizeof(double));
-    double *C = calloc(block_size * block_size, sizeof(double));
+    int n = atoi(argv[1]);                // matrix size
+    int blockSize = n / grid_size;              // size of block
+    int blockNum = blockSize * blockSize; // count of element in each block
 
-    int row = rank / n;
-    int col = rank % n;
+    double *A = malloc(n * n * sizeof(double));
+    double *B = malloc(n * n * sizeof(double));
+    double *C = calloc(n * n, sizeof(double));
+    double *tempC = malloc(n * n * sizeof(double));
 
-    read_matrix_block("matrix_A.out", A, block_size, n, row, col);
-    read_matrix_block("matrix_B.out", B, block_size, n, row, col);
+    double *blockA = malloc(blockNum * sizeof(double));
+    double *blockB = malloc(blockNum * sizeof(double));
+    double *blockC = malloc(blockNum * sizeof(double));
+    double *tmpA = malloc(blockNum * sizeof(double));
+    double *tmpB = malloc(blockNum * sizeof(double));
 
-    MPI_Comm row_comm;
-    MPI_Comm_split(MPI_COMM_WORLD, row, rank, &row_comm);
+    int row = rank / grid_size; // position of processor in matrix
+    int col = rank % grid_size;
 
-    for (int k = 0; k < n; k++)
+    read_matrix_block("matrix_A.out", blockA, blockSize, grid_size, row, col);
+    read_matrix_block("matrix_B.out", blockB, blockSize, grid_size, row, col);
+
+    if (rank == 3)
     {
-        int root = (col + k) % n;
-        MPI_Bcast(B, block_size * block_size, MPI_DOUBLE, root, row_comm);
-        local_matrix_multiply(A, B, C, block_size);
 
-        int next = (rank + n) % size;
-        int prev = (rank - n + size) % size;
-        MPI_Sendrecv_replace(B, block_size * block_size, MPI_DOUBLE, next, 0, prev, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
+        printf("col = %d\n", col);
+        printf("row = %d\n", row);
 
-    MPI_Comm_free(&row_comm);
-
-    double *final_C = NULL;
-    if (rank == 0)
-    {
-        final_C = malloc(size * block_size * block_size * sizeof(double));
-    }
-    MPI_Gather(C, block_size * block_size, MPI_DOUBLE, final_C, block_size * block_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    if (rank == 0)
-    {
-        FILE *file = fopen("matrix_C.out", "w");
-        for (int i = 0; i < n * block_size; i++)
+        printf("The matrix A is:\n");
+        for (int i = 0; i < blockSize; i++)
         {
-            for (int j = 0; j < n * block_size; j++)
+            for (int j = 0; j < blockSize; j++)
             {
-                fprintf(file, "%.2f ", final_C[i * n * block_size + j]);
+                printf("%f ", blockA[i * blockSize + j]);
+            }
+            printf("\n");
+        }
+
+        printf("The matrix B is:\n");
+        for (int i = 0; i < blockSize; i++)
+        {
+            for (int j = 0; j < blockSize; j++)
+            {
+                printf("%f ", blockB[i * blockSize + j]);
+            }
+            printf("\n");
+        }
+    }
+
+    int send_col = row;
+    int idxmin, idxmax;
+
+    for (int steps = 0; steps < grid_size; steps++)
+    {
+        // send blockA to other processor in the same line
+        if (col == send_col)
+        {
+            idxmin = getidx(row, 0, grid_size);
+            idxmax = getidx(row, grid_size - 1, grid_size);
+            for (int i = idxmin; i <= idxmax; i++)
+            {
+                if (i == rank)
+                {
+                    continue;
+                }
+                // send blockA to other processor in the same line
+                MPI_Send(blockA, blockNum, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+            }
+            memcpy(tmpA, blockA, blockNum * sizeof(double));
+        }
+        else
+        {
+            MPI_Recv(tmpA, blockNum, MPI_DOUBLE, getidx(row, send_col, grid_size), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        }
+        send_col = (send_col + 1) % grid_size;
+
+        // calculate
+        for (int i = 0; i < blockSize; i++)
+        {
+            for (int j = 0; j < blockSize; j++)
+            {
+                double sum = blockC[i * blockSize + j];
+                for (int k = 0; k < blockSize; k++)
+                    sum += tmpA[i * blockSize + k] * blockB[k * blockSize + j];
+                blockC[i * blockSize + j] = sum;
+            }
+        }
+
+        // update
+        MPI_Status status;
+        MPI_Sendrecv(blockB, blockNum, MPI_DOUBLE, getidx(row - 1, col, grid_size), 2, tmpB, blockNum, MPI_DOUBLE, getidx(row + 1, col, grid_size), 2, MPI_COMM_WORLD, &status);
+        memcpy(blockB, tmpB, blockNum * sizeof(double));
+    }
+
+    // Gathering the matrix C
+    MPI_Gather(blockC, blockNum, MPI_DOUBLE, tempC, blockNum, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if (rank == 0)
+    {
+        for (int proc = 0; proc < size; proc++)
+        {
+            int grid_row = proc / grid_size;
+            int grid_col = proc % grid_size;
+            for (int i = 0; i < blockSize; i++)
+            {
+                for (int j = 0; j < blockSize; j++)
+                {
+                    int global_row = grid_row * blockSize + i;
+                    int global_col = grid_col * blockSize + j;
+
+                    int tempC_index = proc * blockNum + i * blockSize + j;
+
+                    C[global_row * n + global_col] = tempC[tempC_index];
+                }
+            }
+        }
+    }
+
+    if (rank == 0)
+    {
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                printf("%.2f ", C[i * n + j]);
+            }
+            printf("\n");
+        }
+    }
+
+    if (rank == 0)
+    {
+        FILE *file = fopen("matrix_C_FOX.out", "w");
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                fprintf(file, "%f ", C[i * n + j]);
             }
             fprintf(file, "\n");
         }
         fclose(file);
-        free(final_C);
     }
 
     free(A);
