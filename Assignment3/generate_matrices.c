@@ -8,7 +8,7 @@ void generate_and_write_matrix(const char *filename, int dim)
     FILE *file = fopen(filename, "w");
     if (file == NULL)
     {
-        fprintf(stderr, "Failed to open file %s for writing.\n", filename);
+        printf("Failed to open file %s for writing.\n", filename);
         return;
     }
 
@@ -30,15 +30,15 @@ int main(int argc, char *argv[])
 {
     if (argc < 2)
     {
-        fprintf(stderr, "Usage: %s <dimension>\n", argv[0]);
-        return 1;
+        printf("Please give the dimension of matrix\n");
+        return 0;
     }
 
     int dim = atoi(argv[1]);
     if (dim <= 0)
     {
-        fprintf(stderr, "Invalid dimension size.\n");
-        return 1;
+        printf("Invalid dimension size.\n");
+        return 0;
     }
 
     srand(time(NULL));

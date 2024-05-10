@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdbool.h>
+
+bool OUTPUT_TO_FILE = true;
 
 // Read a block of the matrix from file
 void read_matrix_block(const char *filename, double *block, int block_size, int grid_size, int block_row, int block_col)
@@ -171,16 +174,18 @@ int main(int argc, char **argv)
         double endTime = MPI_Wtime();
         printf("Total time: %f seconds\n", endTime - startTime);
 
-        FILE *file = fopen("matrix_C_FOX.out", "w");
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
+        if(OUTPUT_TO_FILE){
+            FILE *file = fopen("matrix_C_FOX.out", "w");
+            for (int i = 0; i < dim; i++)
             {
-                fprintf(file, "%f ", matrixC[i * dim + j]);
+                for (int j = 0; j < dim; j++)
+                {
+                    fprintf(file, "%.4f ", matrixC[i * dim + j]);
+                }
+                fprintf(file, "\n");
             }
-            fprintf(file, "\n");
+            fclose(file);
         }
-        fclose(file);
     }
 
     free(matrixC);

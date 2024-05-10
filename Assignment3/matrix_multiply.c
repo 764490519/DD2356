@@ -58,7 +58,7 @@ void write_matrix(const char *filename, double **matrix, int dim)
     {
         for (int j = 0; j < dim; j++)
         {
-            fprintf(file, "%f ", matrix[i][j]);
+            fprintf(file, "%.4f ", matrix[i][j]);
         }
         fprintf(file, "\n");
     }
@@ -68,17 +68,17 @@ void write_matrix(const char *filename, double **matrix, int dim)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
+    if (argc < 2)
     {
-        fprintf(stderr, "Usage: %s <dimension>\n", argv[0]);
-        return 1;
+        printf("Please give the dimension of matrix\n");
+        return 0;
     }
 
     int dim = atoi(argv[1]);
     if (dim <= 0)
     {
-        fprintf(stderr, "Dimension must be a positive integer.\n");
-        return 1;
+        printf("Invalid dimension size.\n");
+        return 0;
     }
 
     double **A = read_matrix("matrix_A.out", dim);
