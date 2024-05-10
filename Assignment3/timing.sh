@@ -1,3 +1,5 @@
+#!/bin/bash
+
 matrix_dimension=1680
 
 # processor_sizes=(1 4 9 16 25 36 49 64 100 144 196 225 256)
