@@ -1,6 +1,7 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 // Read a block of the matrix from file
@@ -28,7 +29,6 @@ void read_matrix_block(const char *filename, double *block, int block_size, int 
     {
         for (int j = 0; j < block_size; j++)
         {
-            // block[i * block_size + j] = temp[(block_row * block_size + i) * full_size + block_col * block_size + j];
             block[i * block_size + j] = temp[(block_row * block_size + i) * full_size + (block_col * block_size + j)];
         }
     }
@@ -37,121 +37,116 @@ void read_matrix_block(const char *filename, double *block, int block_size, int 
     fclose(file);
 }
 
-int getidx(int row, int col, int sqr)
+int get_rank(int row, int col, int grid_size)
 {
-    return ((row + sqr) % sqr) * sqr + (col + sqr) % sqr;
+    return ((row + grid_size) % grid_size) * grid_size + (col + grid_size) % grid_size;
 }
 
 int main(int argc, char **argv)
 {
+
     MPI_Init(&argc, &argv);
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size); // number of processor
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+
+    if (argc < 2)
+    {
+        printf("Please give the dimension of matrix\n");
+        return 0;
+    }
+
+    int dim = atoi(argv[1]);
+    if (dim <= 0)
+    {
+        printf("Invalid dimension size.\n");
+        return 0;
+    }
 
     int grid_size = sqrt(size); // processor matrix size
     if (grid_size * grid_size != size)
     {
-        fprintf(stderr, "The number of processes must be a perfect square.\n");
+        printf("The number of processes must be a perfect square!\n");
         MPI_Finalize();
-        return 1;
+        return 0;
     }
 
-    int n = atoi(argv[1]);                // matrix size
-    int blockSize = n / grid_size;              // size of block
-    int blockNum = blockSize * blockSize; // count of element in each block
+    if (dim % grid_size)
+    {
+        printf("dim must divide grid_size exactly !\n");
+        MPI_Finalize();
+        return 0;
+    }
 
-    double *A = malloc(n * n * sizeof(double));
-    double *B = malloc(n * n * sizeof(double));
-    double *C = calloc(n * n, sizeof(double));
-    double *tempC = malloc(n * n * sizeof(double));
+    int block_size = dim / grid_size;        // size of block
+    int block_num = block_size * block_size; // count of element in each block
 
-    double *blockA = malloc(blockNum * sizeof(double));
-    double *blockB = malloc(blockNum * sizeof(double));
-    double *blockC = malloc(blockNum * sizeof(double));
-    double *tmpA = malloc(blockNum * sizeof(double));
-    double *tmpB = malloc(blockNum * sizeof(double));
+    double *matrixC = malloc(dim * dim * sizeof(double));
+    double *tempC = malloc(dim * dim * sizeof(double));
+
+    double *blockA = malloc(block_num * sizeof(double));
+    double *blockB = malloc(block_num * sizeof(double));
+    double *blockC = malloc(block_num * sizeof(double));
+    double *tmpA = malloc(block_num * sizeof(double));
+    double *tmpB = malloc(block_num * sizeof(double));
 
     int row = rank / grid_size; // position of processor in matrix
     int col = rank % grid_size;
 
-    read_matrix_block("matrix_A.out", blockA, blockSize, grid_size, row, col);
-    read_matrix_block("matrix_B.out", blockB, blockSize, grid_size, row, col);
+    read_matrix_block("matrix_A.out", blockA, block_size, grid_size, row, col);
+    read_matrix_block("matrix_B.out", blockB, block_size, grid_size, row, col);
 
-    if (rank == 3)
-    {
+    int sender_col = row;
+    int rank_min, rank_max;
 
-        printf("col = %d\n", col);
-        printf("row = %d\n", row);
-
-        printf("The matrix A is:\n");
-        for (int i = 0; i < blockSize; i++)
-        {
-            for (int j = 0; j < blockSize; j++)
-            {
-                printf("%f ", blockA[i * blockSize + j]);
-            }
-            printf("\n");
-        }
-
-        printf("The matrix B is:\n");
-        for (int i = 0; i < blockSize; i++)
-        {
-            for (int j = 0; j < blockSize; j++)
-            {
-                printf("%f ", blockB[i * blockSize + j]);
-            }
-            printf("\n");
-        }
-    }
-
-    int send_col = row;
-    int idxmin, idxmax;
+    double startTime = MPI_Wtime();
 
     for (int steps = 0; steps < grid_size; steps++)
     {
         // send blockA to other processor in the same line
-        if (col == send_col)
+        if (col == sender_col)
         {
-            idxmin = getidx(row, 0, grid_size);
-            idxmax = getidx(row, grid_size - 1, grid_size);
-            for (int i = idxmin; i <= idxmax; i++)
+            rank_min = get_rank(row, 0, grid_size);
+            rank_max = get_rank(row, grid_size - 1, grid_size);
+            for (int i = rank_min; i <= rank_max; i++)
             {
                 if (i == rank)
                 {
                     continue;
                 }
                 // send blockA to other processor in the same line
-                MPI_Send(blockA, blockNum, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+                MPI_Send(blockA, block_num, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
             }
-            memcpy(tmpA, blockA, blockNum * sizeof(double));
+            memcpy(tmpA, blockA, block_num * sizeof(double));
         }
         else
         {
-            MPI_Recv(tmpA, blockNum, MPI_DOUBLE, getidx(row, send_col, grid_size), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(tmpA, block_num, MPI_DOUBLE, get_rank(row, sender_col, grid_size), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
-        send_col = (send_col + 1) % grid_size;
 
         // calculate
-        for (int i = 0; i < blockSize; i++)
+        for (int i = 0; i < block_size; i++)
         {
-            for (int j = 0; j < blockSize; j++)
+            for (int j = 0; j < block_size; j++)
             {
-                double sum = blockC[i * blockSize + j];
-                for (int k = 0; k < blockSize; k++)
-                    sum += tmpA[i * blockSize + k] * blockB[k * blockSize + j];
-                blockC[i * blockSize + j] = sum;
+                double sum = blockC[i * block_size + j];
+                for (int k = 0; k < block_size; k++)
+                    sum += tmpA[i * block_size + k] * blockB[k * block_size + j];
+                blockC[i * block_size + j] = sum;
             }
         }
 
         // update
-        MPI_Status status;
-        MPI_Sendrecv(blockB, blockNum, MPI_DOUBLE, getidx(row - 1, col, grid_size), 2, tmpB, blockNum, MPI_DOUBLE, getidx(row + 1, col, grid_size), 2, MPI_COMM_WORLD, &status);
-        memcpy(blockB, tmpB, blockNum * sizeof(double));
+        MPI_Sendrecv(blockB, block_num, MPI_DOUBLE, get_rank(row - 1, col, grid_size), 2, tmpB, block_num, MPI_DOUBLE, get_rank(row + 1, col, grid_size), 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        memcpy(blockB, tmpB, block_num * sizeof(double));
+        sender_col = (sender_col + 1) % grid_size;
     }
 
-    // Gathering the matrix C
-    MPI_Gather(blockC, blockNum, MPI_DOUBLE, tempC, blockNum, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // Gathering the Result
+
+    MPI_Gather(blockC, block_num, MPI_DOUBLE, tempC, block_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
 
     if (rank == 0)
     {
@@ -159,50 +154,43 @@ int main(int argc, char **argv)
         {
             int grid_row = proc / grid_size;
             int grid_col = proc % grid_size;
-            for (int i = 0; i < blockSize; i++)
+            for (int i = 0; i < block_size; i++)
             {
-                for (int j = 0; j < blockSize; j++)
+                for (int j = 0; j < block_size; j++)
                 {
-                    int global_row = grid_row * blockSize + i;
-                    int global_col = grid_col * blockSize + j;
+                    int global_row = grid_row * block_size + i;
+                    int global_col = grid_col * block_size + j;
 
-                    int tempC_index = proc * blockNum + i * blockSize + j;
+                    int tempC_index = proc * block_num + i * block_size + j;
 
-                    C[global_row * n + global_col] = tempC[tempC_index];
+                    matrixC[global_row * dim + global_col] = tempC[tempC_index];
                 }
             }
         }
-    }
 
-    if (rank == 0)
-    {
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                printf("%.2f ", C[i * n + j]);
-            }
-            printf("\n");
-        }
-    }
+        double endTime = MPI_Wtime();
+        printf("Total time: %f seconds\n", endTime - startTime);
 
-    if (rank == 0)
-    {
         FILE *file = fopen("matrix_C_FOX.out", "w");
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < dim; i++)
         {
-            for (int j = 0; j < n; j++)
+            for (int j = 0; j < dim; j++)
             {
-                fprintf(file, "%f ", C[i * n + j]);
+                fprintf(file, "%f ", matrixC[i * dim + j]);
             }
             fprintf(file, "\n");
         }
         fclose(file);
     }
 
-    free(A);
-    free(B);
-    free(C);
+    free(matrixC);
+    free(tempC);
+    free(blockA);
+    free(blockB);
+    free(blockC);
+
+
+
     MPI_Finalize();
     return 0;
 }
