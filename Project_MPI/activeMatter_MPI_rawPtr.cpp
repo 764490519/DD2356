@@ -10,7 +10,7 @@
 using namespace std;
 
 constexpr int DEFAULT_BIRD_NUM = 500;
-constexpr bool OUTPUT_TO_FILE = true;
+constexpr bool OUTPUT_TO_FILE = false;
 
 struct generalPara_s
 {
