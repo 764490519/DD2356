@@ -98,7 +98,7 @@ int main(int argc, char *argv[])
     computeActiveMatter(gPara, aPara, posX, posY, theta, rank, size);
 
     if(rank == 0){
-        printf("With %d Process, Execution time: %lfs. \n", size, MPI_Wtime()-startTime);
+        printf("%d bird With %d Process, Execution time: %lfs. \n", birdNum,size, MPI_Wtime()-startTime);
     }
     MPI_Finalize();
     return 0;
